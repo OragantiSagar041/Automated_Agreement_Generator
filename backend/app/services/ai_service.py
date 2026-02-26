@@ -20,7 +20,7 @@ class AIService:
         company = data.get('company_name', 'Arah Infotech Pvt Ltd')
         partner_company = data.get('name', 'Partner Company')
         percentage = data.get('percentage', 0)
-        address = data.get('address', 'Partner Address')
+        partner_address = data.get('address', '')
         joining_date = data.get('joining_date')
         if not joining_date:
             joining_date = data.get('current_date', '')
@@ -49,6 +49,23 @@ class AIService:
             sig_name = parts[0].strip()
             sig_designation = parts[1].strip()
         
+        # Company registered office addresses
+        COMPANY_ADDRESSES = {
+            'Arah Infotech Pvt Ltd': 'Ground Floor, Shanmukh Emmpire, Ayyappa Society, Main Road, Madhapur, Hyderabad, Telangana - 500081',
+            'VAGARIOUS SOLUTIONS PVT LTD': 'Plot No. 1208, Flat No. 201, 2nd Floor, Spline Arcade, Ayyappa Society Main Road, Sri Sai Nagar, Madhapur, Hyderabad, Telangana - 500081',
+            'UP LIFE INDIA PVT LTD': 'Ground Floor, Shanmukh Emmpire, 83, Ayyappa Society, Mega Hills, Madhapur, Hyderabad, Telangana - 500081',
+            'ZERO7 TECHNOLOGIES TRAINING & DEVELOPMENT': 'Ground Floor, Shanmukh Emmpire, Ayyappa Society, Main Road, Madhapur, Hyderabad, Telangana - 500081',
+        }
+        
+        # Look up company address (case-insensitive match)
+        company_address = ''
+        for key, addr in COMPANY_ADDRESSES.items():
+            if key.lower() in company.lower() or company.lower() in key.lower():
+                company_address = addr
+                break
+        if not company_address:
+            company_address = COMPANY_ADDRESSES.get('Arah Infotech Pvt Ltd', '')
+        
         return f"""<div style="font-family: Arial, Helvetica, sans-serif; color: #000; line-height: 1.6; max-width: 800px; margin: 0 auto; text-align: justify; padding-bottom: 50px;">
 
 <h3 style="text-align: center; text-decoration: underline; font-size: 13px; margin-bottom: 30px; word-wrap: break-word; overflow-wrap: break-word;">AGREEMENT B/W {company.upper()} - {partner_company}</h3>
@@ -56,12 +73,13 @@ class AIService:
 <p style="margin-bottom: 20px;">This Agreement is made and entered into on <strong>{joining_date}</strong> by and between:</p>
 
 <p style="margin-bottom: 5px;"><strong>{company.upper()}</strong></p>
-<p style="margin-bottom: 5px;">Registered Office: {address}</p>
+<p style="margin-bottom: 5px;">Registered Office: {company_address}</p>
 <p style="margin-bottom: 20px;">(Hereinafter referred to as &ldquo;{company}&rdquo; or the &ldquo;Service Provider&rdquo;) <strong>AND</strong></p>
 
 <p style="margin-bottom: 5px;"><strong>{partner_company}</strong></p>
-<p style="margin-bottom: 5px;">{address}</p>
+<p style="margin-bottom: 5px;">{partner_address}</p>
 <p style="margin-bottom: 20px;">&ldquo;Parties.&rdquo;</p>
+
 
 <div class="section-block">
 <h4 style="text-decoration: underline; margin-top: 25px;">RECITALS</h4>

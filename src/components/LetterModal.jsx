@@ -206,40 +206,40 @@ const LetterModal = ({ employee, onClose, onSuccess }) => {
 
     useEffect(() => {
         // Update Email Body
-        // Use functional update or just current state since we are in useEffect [companyName]
         setEmailBody(prev =>
             `Dear ${employee.name},\n\nWe are pleased to align on an agreement with ${companyName}.\n\nPlease find the detailed agreement document attached.\n\nBest Regards,\nTeam`
         );
 
-        // Update Generated HTML Content to reflect new Company Name
-        if (generatedContent) {
-            let newContent = generatedContent;
-
-            // Iterate over all known company names and replace them if found
-            // This ensures even if we switched from A to B to C, we catch the name
-            Object.values(COMPANY_NAMES).forEach(name => {
-                if (name !== companyName) { // Don't replace self with self (though regex would handle it)
-                    // Escape special chars for regex
-                    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    // Case insensitive global replacement? Or just case sensitive?
-                    // Usually company names are proper nouns. Let's use 'g'
-                    const regex = new RegExp(escapedName, 'g');
-                    newContent = newContent.replace(regex, companyName);
-                }
-            });
-
-            if (newContent !== generatedContent) {
-                console.log("Updated content with new company name.");
-                setGeneratedContent(newContent);
-            } else {
-                // Even if text didn't change, we might need to regenerate PDF because the *Template Background* changed check `viewMode`
-                if (viewMode === 'pdf') {
-                    // Force preview update with current content (which might be unchanged text, but new background via selectedTemplate state used in generatePreview)
-                    generatePreview(generatedContent);
-                }
-            }
+        // When company name changes, regenerate content from backend
+        // This ensures correct company name, address, and all references
+        if (generatedContent && companyName) {
+            console.log("Company changed to:", companyName, "— regenerating content...");
+            fetch(`${API_URL}/letters/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    employee_id: employee.id,
+                    letter_type: letterType,
+                    tone: "Professional",
+                    company_name: companyName
+                })
+            })
+                .then(res => res.json())
+                .then(async data => {
+                    setGeneratedContent(data.content);
+                    if (viewMode === 'pdf') {
+                        await generatePreview(data.content);
+                    }
+                })
+                .catch(err => {
+                    console.error("Error regenerating for company change:", err);
+                    // Fallback: at least re-render the PDF with new template background
+                    if (viewMode === 'pdf' && generatedContent) {
+                        generatePreview(generatedContent);
+                    }
+                });
         }
-    }, [companyName, employee.name]); // removed selectedTemplate dependency to avoid double trigger, companyName change drives this
+    }, [companyName]); // Triggers when template changes → companyName changes
 
     // Auto-Preview when generatedContent changes
     useEffect(() => {
