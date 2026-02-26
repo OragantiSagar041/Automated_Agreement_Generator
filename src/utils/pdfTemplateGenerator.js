@@ -1,283 +1,327 @@
 /**
- * Generates a PDF by writing text ON TOP of an existing PDF template.
- * @param {string} htmlContent - The letter content (HTML string).
- * @param {string} templateUrl - URL to the PDF template (e.g. '/Arah_Template.pdf').
- * @returns {Promise<string>} - Base64 Data URI of the final PDF.
+ * PDF Template Generator — Manual Canvas Slicing Approach
  *
- * FIXES APPLIED:
- * 1. Unified page size to A4 (595.28 x 841.89) throughout — no more Letter vs A4 mismatch.
- * 2. Reduced yStart from 180 → 130 (first-page top margin for template header).
- * 3. jsPDF margin changed from [yStart, 0, 80, 0] → [yStart, 20, 60, 20] to prevent side clipping.
- * 4. BlendMode.Darken replaced with BlendMode.Normal for the PDF overlay strategy
- *    (Darken was hiding light/colored text).
- * 5. windowWidth increased to 820 to better match the A4 content width after scaling.
- * 6. html2canvas scale reduced to 1.5 (was 2) to prevent memory/rendering issues on long docs.
+ * Reference: DYNAPIX Digital Media agreement.pdf
+ *   Page A4: 597.5 × 843.5pt, Font: Calibri 12pt
+ *   Margins: top=140pt (page2+), bottom=104pt, left=50pt
+ *
+ * This version uses html2canvas to render the ENTIRE content as one tall
+ * canvas, then MANUALLY slices it at smart page boundaries (never cutting
+ * through a section heading). This eliminates all jsPDF autoPaging bugs.
  */
 
 export const generatePdfWithTemplate = async (htmlContent, templateUrl = '/Arah_Template.pdf') => {
     try {
-        const { PDFDocument, BlendMode } = await import('pdf-lib');
-        const { jsPDF } = await import('jspdf');
+        const { PDFDocument } = await import('pdf-lib');
+        const html2canvas = (await import('html2canvas')).default;
 
-        // --- A4 dimensions in points ---
-        const A4_WIDTH = 595.28;
-        const A4_HEIGHT = 841.89;
-
-        // FIX 1: Use A4 for jsPDF too (was [612, 792] US Letter → now A4)
-        // This ensures the content PDF and template PDF share the same coordinate space.
-        const PAGE_WIDTH_PT = A4_WIDTH;   // 595.28
-        const PAGE_HEIGHT_PT = A4_HEIGHT; // 841.89
-
-        // The HTML container width in px used by html2canvas / jsPDF.
-        // jsPDF maps this windowWidth → PAGE_WIDTH_PT.
-        const CONTAINER_WIDTH_PX = 794; // ≈ A4 at 96dpi
-
-        // FIX 2: Reduced top margin (yStart).
-        // 180pt was too aggressive — it pushed content below the visible area on continuation pages.
-        // 130pt leaves enough room for the Arah Infotech header/logo on page 1.
-        const isDense = htmlContent.length > 2500
-            || htmlContent.includes("REMUNERATION")
-            || htmlContent.includes("Annexure A");
-
-        const config = {
-            fontSize: isDense ? '13px' : '15px',
-            lineHeight: isDense ? '1.5' : '1.75',
-            pMargin: isDense ? '10px' : '14px',
-            hMargin: isDense ? '18px' : '26px',
-            tableSize: isDense ? '12px' : '13px',
-            padding: '0px 72px',   // horizontal padding only; top/bottom handled by jsPDF margin
-            yStart: 130,          // FIX: was 180 → now 130
+        // ── Template-specific configurations ──
+        const TEMPLATE_CONFIG = {
+            '/Arah_Template.pdf': {
+                pageW: 612, pageH: 792, marginTop: 111, marginBottom: 57, marginLR: 50
+            },
+            '/Vagerious.pdf': {
+                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 104, marginLR: 50
+            },
+            '/UPlife.pdf': {
+                pageW: 596, pageH: 842, marginTop: 99, marginBottom: 78, marginLR: 50
+            },
+            '/Zero7_A4.pdf': {
+                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 101, marginLR: 50
+            },
+            '/Zero7_A4.jpg': {
+                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 101, marginLR: 50
+            },
         };
 
-        // ── 1. Build the hidden DOM container ──────────────────────────────────
+        const cfg = TEMPLATE_CONFIG[templateUrl] || {
+            pageW: 612, pageH: 792, marginTop: 110, marginBottom: 60, marginLR: 50
+        };
+
+        const PAGE_W = cfg.pageW;
+        const PAGE_H = cfg.pageH;
+        const MARGIN_TOP = cfg.marginTop;
+        const MARGIN_BOTTOM = cfg.marginBottom;
+        const MARGIN_LR = cfg.marginLR;
+        const CONTENT_W = PAGE_W - (MARGIN_LR * 2);     // pt
+        const CONTENT_H = PAGE_H - MARGIN_TOP - MARGIN_BOTTOM;  // pt per page
+
+        // Scale: we want the content to render at ~1pt per CSS px for simplicity
+        // Container width = CONTENT_W px, so 1px CSS = 1pt PDF
+        const CONTAINER_W = Math.round(CONTENT_W);  // ~495-512px
+        const SCALE = 2;  // html2canvas hi-res factor
+
+        console.log(`[PDF GEN] Template: ${templateUrl}`);
+        console.log(`[PDF GEN] Page: ${PAGE_W}×${PAGE_H}, Content: ${CONTENT_W}×${CONTENT_H}, Container: ${CONTAINER_W}px`);
+
+        const isDense = htmlContent.length > 2500 ||
+            htmlContent.includes('REMUNERATION') ||
+            htmlContent.includes('Annexure A');
+
+        const fontSize = isDense ? '11px' : '12px';
+        const lineHeight = isDense ? '1.55' : '1.7';
+
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 1 — Build DOM container (1px = 1pt mapping)
+        // ════════════════════════════════════════════════════════════════════
         const wrapper = document.createElement('div');
         wrapper.style.cssText = `
             position: absolute;
             left: 0;
             top: 0;
-            width: ${CONTAINER_WIDTH_PX}px;
-            height: auto;
-            z-index: -9999; // Hide underneath UI instead of tossing it 10 miles off-screen
+            width: ${CONTAINER_W}px;
+            z-index: -9999;
+            background: #ffffff;
+            overflow: visible;
         `;
 
-        const styleEl = document.createElement('style');
-        styleEl.innerHTML = `
-            * {
+        const styleTag = document.createElement('style');
+        styleTag.textContent = `
+            .pdfgen * {
                 font-family: Arial, Helvetica, sans-serif !important;
                 color: #000000 !important;
                 -webkit-text-fill-color: #000000 !important;
                 box-sizing: border-box !important;
             }
-            .pdf-container {
-                width: ${CONTAINER_WIDTH_PX}px !important;
-                background: white !important;
-                padding: ${config.padding} !important;
-                font-size: ${config.fontSize} !important;
-                line-height: ${config.lineHeight} !important;
-                display: block !important;
+            .pdfgen {
+                width: ${CONTAINER_W}px !important;
+                background: #ffffff !important;
+                padding: 0 8px !important;
+                font-size: ${fontSize} !important;
+                line-height: ${lineHeight} !important;
             }
-            p  { margin-bottom: ${config.pMargin} !important; text-align: justify !important; display: block !important; }
-            h3, h4, strong, b {
-                margin-top: ${config.hMargin} !important;
-                margin-bottom: 8px !important;
-                display: block !important;
+            .pdfgen p {
+                margin-bottom: ${isDense ? '5px' : '8px'} !important;
+                text-align: justify !important;
             }
-            h3 { font-size: ${parseInt(config.fontSize) + 2}px !important; text-transform: uppercase; }
-            .date-row { text-align: right !important; margin-bottom: 25px !important; display: block !important; }
-            .signature-block { page-break-inside: avoid !important; margin-top: 50px !important; display: block !important; }
-            table { width: 100% !important; margin: 15px 0 !important; border-collapse: collapse !important; font-size: ${config.tableSize} !important; }
-            td, th { padding: 8px !important; border: 1px solid #000 !important; }
+            .pdfgen h1, .pdfgen h2, .pdfgen h3, .pdfgen h4,
+            .pdfgen strong, .pdfgen b {
+                margin-top: ${isDense ? '10px' : '15px'} !important;
+                margin-bottom: 4px !important;
+            }
+            .pdfgen h3 {
+                font-size: ${parseInt(fontSize) + 1}px !important;
+                text-transform: uppercase;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                text-align: center !important;
+            }
+            .pdfgen h4 {
+                font-size: ${parseInt(fontSize) + 1}px !important;
+            }
+            .pdfgen table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                font-size: ${isDense ? '10px' : '11px'} !important;
+                margin: 8px 0 !important;
+            }
+            .pdfgen td, .pdfgen th { padding: 4px !important; }
+            .pdfgen table:not([style*="border: none"]) td,
+            .pdfgen table:not([style*="border: none"]) th {
+                border: 1px solid #000 !important;
+            }
+            .pdfgen ul, .pdfgen ol {
+                padding-left: 18px !important;
+                margin-top: 2px !important;
+                margin-bottom: 5px !important;
+            }
+            .pdfgen li { margin-bottom: 2px !important; }
         `;
 
         const container = document.createElement('div');
-        container.className = 'pdf-container';
+        container.className = 'pdfgen';
+        container.style.position = 'relative';
         container.innerHTML = htmlContent;
 
-        wrapper.appendChild(styleEl);
+        wrapper.appendChild(styleTag);
         wrapper.appendChild(container);
         document.body.appendChild(wrapper);
 
-        // Force inline colours for html2canvas reliability
+        // Force solid black text
         container.querySelectorAll('*').forEach(el => {
             el.style.color = '#000000';
-            if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'STRONG', 'B', 'TD', 'TH'].includes(el.tagName)) {
+            if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'STRONG', 'B', 'TH'].includes(el.tagName)) {
                 el.style.fontWeight = 'bold';
             }
         });
 
-        // ── 2. Render HTML → jsPDF (A4) ───────────────────────────────────────
-        const contentPdfDoc = new jsPDF({
-            unit: 'pt',
-            format: [PAGE_WIDTH_PT, PAGE_HEIGHT_PT], // FIX: A4 instead of Letter
-        });
+        await new Promise(r => setTimeout(r, 500));
 
-        // Use setTimeout to ensure the browser strictly paints and correctly measures the DOM height.
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 2 — Calculate smart page breaks (section-aware)
+        // ════════════════════════════════════════════════════════════════════
+        // Since 1px CSS ≈ 1pt PDF, CONTENT_H px = CONTENT_H pt content per page
+        const totalHeight = container.scrollHeight;
+        console.log(`[PDF GEN] Total content height: ${totalHeight}px, Content/page: ${CONTENT_H}px`);
 
-        // ── 100% BULLETPROOF FIX: Manual Canvas Slicing Engine ──
-        // jsPDF's internal autoPaging is too flaky and causes 1-page or blank generation bugs.
-        // We will generate the full canvas ourselves, CHUNK it into smaller canvas pieces, 
-        // and add those perfectly sized pieces to each page.
-        const html2canvasModule = await import('html2canvas');
-        const html2canvas = html2canvasModule.default || html2canvasModule;
+        // Find all section headings and their Y positions
+        const headings = Array.from(container.querySelectorAll('h4'));
+        const sectionYs = headings.map(h => h.offsetTop);
 
-        const totalHeight = wrapper.scrollHeight;
+        // Calculate page break Y positions (in container px)
+        const pageBreaks = [0]; // Start of first page
+        let currentY = 0;
 
-        const canvas = await html2canvas(wrapper, {
-            scale: 2, // High-res text
-            useCORS: true,
-            logging: false,
-            backgroundColor: null, // CRITICAL: null ensures a transparent background so the template shows through
-            windowWidth: CONTAINER_WIDTH_PX,
-            width: CONTAINER_WIDTH_PX,
-            height: totalHeight,
-            windowHeight: totalHeight
-        });
+        while (currentY + CONTENT_H < totalHeight) {
+            let idealBreak = currentY + CONTENT_H;
 
-        const pdfWidth = PAGE_WIDTH_PT; // Fill A4 width
-        const pdfHeightRatio = pdfWidth / canvas.width; // e.g. 595.28 / (794 * 2)
+            // Find the best break point: just BEFORE a section heading
+            // Look for the heading that's closest to (but before) the ideal break
+            let bestBreak = idealBreak;
 
-        const topMargin1 = config.yStart; // 130pt header clearance for Page 1
-        const topMarginN = 60; // 60pt header clearance for Page 2+
-        const bottomMargin = 60;
-
-        let currentImgPos = 0; // The Y coordinate in the original Canvas
-        let currentPage = 1;
-
-        while (currentImgPos < canvas.height) {
-            if (currentPage > 1) {
-                contentPdfDoc.addPage();
+            for (const sy of sectionYs) {
+                // If a heading is within the last 30% of the page, break before it
+                if (sy > currentY + CONTENT_H * 0.3 && sy <= idealBreak) {
+                    bestBreak = sy - 5; // 5px buffer before heading
+                }
             }
 
-            const yOffset = currentPage === 1 ? topMargin1 : topMarginN;
-            const pdfUsableHeight = PAGE_HEIGHT_PT - yOffset - bottomMargin;
-            const canvasUsableHeight = pdfUsableHeight / pdfHeightRatio;
+            // Also check: if a heading would be cut (heading starts before break
+            // but its content extends after), break before that heading
+            for (let i = 0; i < headings.length; i++) {
+                const hTop = sectionYs[i];
+                const hBottom = i + 1 < sectionYs.length ? sectionYs[i + 1] : totalHeight;
+                const sectionHeight = hBottom - hTop;
 
-            // Chop the canvas exactly to the usable height
-            const chunkCanvas = document.createElement('canvas');
-            chunkCanvas.width = canvas.width;
-            chunkCanvas.height = Math.min(canvasUsableHeight, canvas.height - currentImgPos);
+                // If section starts on this page and extends past the break
+                if (hTop > currentY && hTop < idealBreak && hBottom > idealBreak) {
+                    // If the section fits on ONE page, break BEFORE it
+                    if (sectionHeight <= CONTENT_H) {
+                        bestBreak = Math.min(bestBreak, hTop - 5);
+                    }
+                }
+            }
 
-            const chunkCtx = chunkCanvas.getContext('2d');
-            chunkCtx.drawImage(
-                canvas,
-                0, currentImgPos, canvas.width, chunkCanvas.height, // Source coordinates
-                0, 0, chunkCanvas.width, chunkCanvas.height // Destination coordinates
-            );
+            // Ensure we always make progress (at least 50% of page height)
+            if (bestBreak <= currentY + CONTENT_H * 0.5) {
+                bestBreak = idealBreak;
+            }
 
-            const imgData = chunkCanvas.toDataURL('image/png');
-            const chunkPdfHeight = chunkCanvas.height * pdfHeightRatio;
-
-            // Draw this slice exactly at yOffset without using negative coordinates
-            contentPdfDoc.addImage(imgData, 'PNG', 0, yOffset, pdfWidth, chunkPdfHeight);
-
-            currentImgPos += chunkCanvas.height;
-            currentPage++;
-
-            if (currentPage > 20) break; // Infinite loop safety
+            pageBreaks.push(bestBreak);
+            currentY = bestBreak;
         }
+
+        const numPages = pageBreaks.length;
+        console.log(`[PDF GEN] Smart page breaks:`, pageBreaks, `→ ${numPages} pages`);
+
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 3 — Capture canvas with html2canvas
+        // ════════════════════════════════════════════════════════════════════
+        const canvas = await html2canvas(container, {
+            scale: SCALE,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            width: CONTAINER_W,
+            height: totalHeight,
+            windowWidth: CONTAINER_W,
+        });
 
         document.body.removeChild(wrapper);
 
-        const contentPdfBytes = contentPdfDoc.output('arraybuffer');
+        console.log(`[PDF GEN] Canvas: ${canvas.width}×${canvas.height}`);
 
-        // ── 3. Overlay content onto template ──────────────────────────────────
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 4 — Slice canvas into pages and build PDF
+        // ════════════════════════════════════════════════════════════════════
+        const finalDoc = await PDFDocument.create();
+
+        // Load template
         const isImage = /\.(jpg|jpeg|png)$/i.test(templateUrl);
+        let templateImage = null;
+        let templatePdfDoc = null;
+        let templatePage = null;
 
         if (isImage) {
-            // ── IMAGE TEMPLATE STRATEGY ──────────────────────────────────────
-            console.log("Using Image Template Strategy");
-
-            const finalDoc = await PDFDocument.create();
             const imgRes = await fetch(`${templateUrl}?t=${Date.now()}`);
-            const contentType = imgRes.headers.get('content-type') || '';
-
-            if (!imgRes.ok || contentType.includes('text/html')) {
-                throw new Error(`Template image missing: ${templateUrl}`);
-            }
-
             const imageBytes = await imgRes.arrayBuffer();
-            const embeddedImage = templateUrl.toLowerCase().endsWith('.png')
+            templateImage = templateUrl.toLowerCase().endsWith('.png')
                 ? await finalDoc.embedPng(imageBytes)
                 : await (async () => {
                     try { return await finalDoc.embedJpg(imageBytes); }
                     catch { return await finalDoc.embedPng(imageBytes); }
                 })();
-
-            const contentDocForEmbed = await PDFDocument.load(contentPdfBytes);
-            const embeddedContent = await finalDoc.embedPdf(contentDocForEmbed);
-            const pageCount = embeddedContent.length;
-
-            for (let i = 0; i < pageCount; i++) {
-                const finalPage = finalDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-
-                // Draw template image as background
-                finalPage.drawImage(embeddedImage, { x: 0, y: 0, width: A4_WIDTH, height: A4_HEIGHT });
-
-                // Draw content on top
-                if (embeddedContent[i]) {
-                    finalPage.drawPage(embeddedContent[i], {
-                        x: 0, y: 0, width: A4_WIDTH, height: A4_HEIGHT,
-                        blendMode: BlendMode.Normal,
-                    });
-                }
-            }
-
-            return _pdfBytesToDataUri(await finalDoc.save());
-
         } else {
-            // ── EXISTING PDF TEMPLATE STRATEGY ───────────────────────────────
-            console.log(`Fetching PDF template: ${templateUrl}`);
             const templateRes = await fetch(`${templateUrl}?t=${Date.now()}`);
-            if (!templateRes.ok) throw new Error(`Template PDF not found: ${templateUrl}`);
-
             const templatePdfBytes = await templateRes.arrayBuffer();
-            const finalDoc = await PDFDocument.load(templatePdfBytes);
-            const contentDoc = await PDFDocument.load(contentPdfBytes);
-            const embeddedPages = await finalDoc.embedPdf(contentDoc);
-            const contentPageCount = contentDoc.getPageCount();
-
-            // Ensure template has enough pages (duplicate page 0 as blank-with-header pages)
-            while (finalDoc.getPageCount() < contentPageCount) {
-                const [dup] = await finalDoc.copyPages(finalDoc, [0]);
-                finalDoc.addPage(dup);
-            }
-
-            const pages = finalDoc.getPages();
-            for (let i = 0; i < contentPageCount; i++) {
-                const finalPage = pages[i];
-                const { width, height } = finalPage.getSize();
-
-                if (embeddedPages[i]) {
-                    // FIX 4: BlendMode.Normal instead of BlendMode.Darken.
-                    // Darken was suppressing light-coloured text and making content invisible
-                    // against the white template background.
-                    finalPage.drawPage(embeddedPages[i], {
-                        x: 0, y: 0, width, height,
-                        opacity: 1,
-                        blendMode: BlendMode.Normal,
-                    });
-                }
-            }
-
-            // Trim any extra template pages
-            while (finalDoc.getPageCount() > contentPageCount) {
-                finalDoc.removePage(finalDoc.getPageCount() - 1);
-            }
-
-            return _pdfBytesToDataUri(await finalDoc.save());
+            templatePdfDoc = await PDFDocument.load(templatePdfBytes);
+            const [embeddedPage] = await finalDoc.embedPdf(templatePdfDoc, [0]);
+            templatePage = embeddedPage;
         }
 
+        // Process each page
+        for (let i = 0; i < numPages; i++) {
+            const sliceStartPx = pageBreaks[i];
+            const sliceEndPx = i + 1 < numPages ? pageBreaks[i + 1] : totalHeight;
+            const sliceHeightPx = sliceEndPx - sliceStartPx;
+
+            // Slice the canvas
+            const sliceCanvas = document.createElement('canvas');
+            sliceCanvas.width = canvas.width;
+            sliceCanvas.height = Math.ceil(sliceHeightPx * SCALE);
+            const ctx = sliceCanvas.getContext('2d');
+
+            // Draw white background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+
+            // Copy the relevant portion from the main canvas
+            ctx.drawImage(
+                canvas,
+                0, Math.floor(sliceStartPx * SCALE),           // source x, y
+                canvas.width, Math.ceil(sliceHeightPx * SCALE), // source w, h
+                0, 0,                                            // dest x, y
+                canvas.width, Math.ceil(sliceHeightPx * SCALE)  // dest w, h
+            );
+
+            // Convert slice to PNG
+            const slicePng = sliceCanvas.toDataURL('image/png');
+            const slicePngBytes = Uint8Array.from(
+                atob(slicePng.split(',')[1]),
+                c => c.charCodeAt(0)
+            );
+
+            const embeddedSlice = await finalDoc.embedPng(slicePngBytes);
+
+            // Create page with template background
+            const page = finalDoc.addPage([PAGE_W, PAGE_H]);
+
+            // Draw template background
+            if (templateImage) {
+                page.drawImage(templateImage, { x: 0, y: 0, width: PAGE_W, height: PAGE_H });
+            } else if (templatePage) {
+                page.drawPage(templatePage, { x: 0, y: 0, width: PAGE_W, height: PAGE_H });
+            }
+
+            // Draw content slice in the safe content area
+            // PDF y-axis is bottom-up: y=0 is bottom of page
+            // Content goes from MARGIN_TOP (from top) to PAGE_H - MARGIN_BOTTOM (from top)
+            // In PDF coords: y = PAGE_H - MARGIN_TOP - sliceHeightPt
+            const sliceWidthPt = CONTENT_W;
+            const sliceHeightPt = Math.min(sliceHeightPx, CONTENT_H);
+
+            page.drawImage(embeddedSlice, {
+                x: MARGIN_LR,
+                y: PAGE_H - MARGIN_TOP - sliceHeightPt,
+                width: sliceWidthPt,
+                height: sliceHeightPt,
+            });
+        }
+
+        console.log(`[PDF GEN] Final PDF: ${finalDoc.getPageCount()} pages`);
+        return _pdfBytesToDataUri(await finalDoc.save());
+
     } catch (err) {
-        console.error("PDF Template Error:", err);
+        console.error('[PDF GEN] Error:', err);
         throw err;
     }
 };
 
-// ── Helper ─────────────────────────────────────────────────────────────────────
 function _pdfBytesToDataUri(pdfBytes) {
     const bytes = new Uint8Array(pdfBytes);
     let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
     return 'data:application/pdf;base64,' + window.btoa(binary);
 }

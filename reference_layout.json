@@ -1,0 +1,148 @@
+{
+  "pages": 4,
+  "page_analysis": [
+    {
+      "page": 1,
+      "width": 597.5,
+      "height": 843.5,
+      "images": [
+        "[HDR] y=0-824 (824.1pt)"
+      ],
+      "first_text_y": 181.0,
+      "last_text_y": 739.5,
+      "left_margin": 49.4,
+      "right_edge": 567.8,
+      "bottom_margin": 103.9,
+      "content_width": 518.4,
+      "fonts": {
+        "Cambria-Bold 13.0pt": 1,
+        "Calibri 12.0pt": 7,
+        "Calibri-Bold 12.0pt": 18,
+        "Calibri-Bold 12.6pt": 1,
+        "SymbolMT 11.0pt": 3
+      },
+      "headings": [
+        {
+          "y": 644.0,
+          "text": "1."
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "width": 597.5,
+      "height": 843.5,
+      "images": [
+        "[HDR] y=0-824 (824.2pt)"
+      ],
+      "first_text_y": 148.1,
+      "last_text_y": 687.6,
+      "left_margin": 49.4,
+      "right_edge": 543.8,
+      "bottom_margin": 155.9,
+      "content_width": 494.3,
+      "fonts": {
+        "Calibri-Bold 12.6pt": 4,
+        "Calibri-Bold 11.0pt": 9,
+        "SymbolMT 11.0pt": 20,
+        "Calibri 11.0pt": 32
+      },
+      "headings": [
+        {
+          "y": 148.1,
+          "text": "2."
+        },
+        {
+          "y": 180.9,
+          "text": "8.33"
+        },
+        {
+          "y": 246.4,
+          "text": "3."
+        },
+        {
+          "y": 414.6,
+          "text": "4."
+        },
+        {
+          "y": 529.3,
+          "text": "5."
+        }
+      ]
+    },
+    {
+      "page": 3,
+      "width": 597.5,
+      "height": 843.5,
+      "images": [
+        "[HDR] y=0-820 (819.5pt)"
+      ],
+      "first_text_y": 139.9,
+      "last_text_y": 593.6,
+      "left_margin": 49.4,
+      "right_edge": 561.5,
+      "bottom_margin": 249.9,
+      "content_width": 512.0,
+      "fonts": {
+        "Calibri-Bold 12.6pt": 6,
+        "Calibri-Bold 11.0pt": 6,
+        "SymbolMT 11.0pt": 15,
+        "Calibri 11.0pt": 18
+      },
+      "headings": [
+        {
+          "y": 139.9,
+          "text": "6."
+        },
+        {
+          "y": 230.3,
+          "text": "7."
+        },
+        {
+          "y": 319.9,
+          "text": "8."
+        },
+        {
+          "y": 386.0,
+          "text": "9."
+        },
+        {
+          "y": 460.6,
+          "text": "10."
+        },
+        {
+          "y": 518.3,
+          "text": "11."
+        }
+      ]
+    },
+    {
+      "page": 4,
+      "width": 597.5,
+      "height": 843.5,
+      "images": [
+        "[BODY] y=309-343 (34.5pt)",
+        "[HDR] y=4-828 (824.2pt)"
+      ],
+      "first_text_y": 140.2,
+      "last_text_y": 421.6,
+      "left_margin": 49.4,
+      "right_edge": 521.4,
+      "bottom_margin": 421.9,
+      "content_width": 471.9,
+      "fonts": {
+        "Calibri-Bold 12.6pt": 1,
+        "Calibri-Bold 11.0pt": 6,
+        "SymbolMT 11.0pt": 1,
+        "Calibri 11.0pt": 2,
+        "Cambria-Bold 13.0pt": 2
+      },
+      "headings": [
+        {
+          "y": 140.2,
+          "text": "12."
+        }
+      ]
+    }
+  ]
+}
