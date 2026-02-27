@@ -18,19 +18,24 @@ export const generatePdfWithTemplate = async (htmlContent, templateUrl = '/Arah_
         // ── Template-specific configurations ──
         const TEMPLATE_CONFIG = {
             '/Arah_Template.pdf': {
-                pageW: 612, pageH: 792, marginTop: 111, marginBottom: 57, marginLR: 50
+                pageW: 612, pageH: 792, marginTop: 111, marginBottom: 57, marginLR: 50,
+                watermark: 'ARAH INFOTECH'
             },
             '/Vagerious.pdf': {
-                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 104, marginLR: 50
+                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 104, marginLR: 50,
+                watermark: 'VAGARIOUS'
             },
             '/UPlife.pdf': {
-                pageW: 596, pageH: 842, marginTop: 99, marginBottom: 78, marginLR: 50
+                pageW: 596, pageH: 842, marginTop: 99, marginBottom: 78, marginLR: 50,
+                watermark: 'UP LIFE INDIA'
             },
             '/Zero7_A4.pdf': {
-                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 101, marginLR: 50
+                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 101, marginLR: 50,
+                watermark: 'ZERO7'
             },
             '/Zero7_A4.jpg': {
-                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 101, marginLR: 50
+                pageW: 595, pageH: 842, marginTop: 140, marginBottom: 101, marginLR: 50,
+                watermark: 'ZERO7'
             },
         };
 
@@ -71,7 +76,7 @@ export const generatePdfWithTemplate = async (htmlContent, templateUrl = '/Arah_
             top: 0;
             width: ${CONTAINER_W}px;
             z-index: -9999;
-            background: #ffffff;
+            background: transparent;
             overflow: visible;
         `;
 
@@ -211,7 +216,7 @@ export const generatePdfWithTemplate = async (htmlContent, templateUrl = '/Arah_
             scale: SCALE,
             useCORS: true,
             logging: false,
-            backgroundColor: '#ffffff',
+            backgroundColor: null,  // Transparent — template background shows through
             width: CONTAINER_W,
             height: totalHeight,
             windowWidth: CONTAINER_W,
@@ -261,9 +266,8 @@ export const generatePdfWithTemplate = async (htmlContent, templateUrl = '/Arah_
             sliceCanvas.height = Math.ceil(sliceHeightPx * SCALE);
             const ctx = sliceCanvas.getContext('2d');
 
-            // Draw white background
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+            // Transparent background — template background will show through
+            // (no white fill = template watermarks remain visible)
 
             // Copy the relevant portion from the main canvas
             ctx.drawImage(
@@ -306,6 +310,30 @@ export const generatePdfWithTemplate = async (htmlContent, templateUrl = '/Arah_
                 width: sliceWidthPt,
                 height: sliceHeightPt,
             });
+
+            // ── Draw watermark ON TOP of everything (last = topmost layer) ──
+            if (cfg.watermark) {
+                const { rgb, degrees, StandardFonts } = await import('pdf-lib');
+                const watermarkFont = await finalDoc.embedFont(StandardFonts.HelveticaBold);
+                const wmText = cfg.watermark;
+                const wmFontSize = 60;
+                const wmWidth = watermarkFont.widthOfTextAtSize(wmText, wmFontSize);
+                const wmHeight = watermarkFont.heightAtSize(wmFontSize);
+
+                // Center of page
+                const cx = PAGE_W / 2;
+                const cy = PAGE_H / 2;
+
+                page.drawText(wmText, {
+                    x: cx - wmWidth / 2,
+                    y: cy - wmHeight / 2,
+                    size: wmFontSize,
+                    font: watermarkFont,
+                    color: rgb(0.75, 0.75, 0.75),
+                    opacity: 0.06,
+                    rotate: degrees(45),
+                });
+            }
         }
 
         console.log(`[PDF GEN] Final PDF: ${finalDoc.getPageCount()} pages`);

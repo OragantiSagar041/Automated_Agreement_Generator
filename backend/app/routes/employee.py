@@ -12,10 +12,45 @@ router = APIRouter(
     tags=["employees"]
 )
 
-# Helper to fix ObjectId in response if not using Pydantic v2 alias generator fully or for manual dicts
+# Helper to fix ObjectId in response
 def fix_id(doc):
     if doc and "_id" in doc:
-        doc["id"] = str(doc["_id"])
+        doc["id"] = str(doc["_id"])  # always a clean 24-char hex string
+        doc.pop("_id", None)         # remove raw ObjectId to avoid serialization issues
+    return doc
+
+import math
+
+def sanitize_doc(doc):
+    """Fix corrupted documents from old imports so they pass Pydantic validation."""
+    if not doc:
+        return doc
+    
+    # Fix email: if it's a number (phone), convert to placeholder string
+    email = doc.get("email")
+    if email is not None and not isinstance(email, str):
+        doc["email"] = f"{int(email)}@imported.local"
+    elif not email:
+        doc["email"] = "unknown@imported.local"
+    
+    # Fix string fields that might be NaN or non-string
+    for field in ["designation", "department", "name", "emp_id", "location", 
+                   "employment_type", "address", "replacement", "signature", 
+                   "invoice_post_joining"]:
+        val = doc.get(field)
+        if val is not None:
+            if isinstance(val, float) and math.isnan(val):
+                doc[field] = None
+            elif not isinstance(val, str) and val is not None:
+                doc[field] = str(val)
+    
+    # Fix compensation: old HR format has {ctc, basic_salary, ...} without percentage
+    comp = doc.get("compensation")
+    if isinstance(comp, dict) and "percentage" not in comp:
+        doc["compensation"] = {"percentage": 0.0}
+    elif comp is None:
+        doc["compensation"] = {"percentage": 0.0}
+    
     return doc
 
 @router.post("/", response_model=schemas.Employee)
@@ -31,14 +66,11 @@ def create_employee(employee: schemas.EmployeeCreate, db = Depends(database.get_
     # MongoDB cannot store 'date' objects directly, only 'datetime'
     if emp_data.get('joining_date') and isinstance(emp_data['joining_date'], date):
         d = emp_data['joining_date']
-        # Check if it's already a datetime (which is a subclass of date), if so, leave it (or ensure encoding)
         if not isinstance(d, datetime):
             emp_data['joining_date'] = datetime(d.year, d.month, d.day)
-            print(f"Converted joining_date: {emp_data['joining_date']} (type: {type(emp_data['joining_date'])})")
     
     # Auto-generate emp_id if missing
     if not emp_data.get('emp_id'):
-        # Simple sequence strategy: Count + 1 (Note: Not concurrency safe but okay for MVP)
         count = db.companies.count_documents({})
         emp_data['emp_id'] = f"EMP{count + 1:03d}" 
 
@@ -61,18 +93,20 @@ def create_employee(employee: schemas.EmployeeCreate, db = Depends(database.get_
 @router.get("/", response_model=List[schemas.Employee])
 def read_employees(skip: int = 0, limit: int = 100, db = Depends(database.get_db)):
     cursor = db.companies.find().skip(skip).limit(limit)
-    employees = [fix_id(doc) for doc in cursor]
+    employees = [sanitize_doc(fix_id(doc)) for doc in cursor]
     return employees
 
 @router.get("/template")
 def download_template():
     """
     Download Excel Template for Bulk Import.
+    Headers match the Add Company form fields.
     """
     headers = [
-        "Employee ID", "Full Name", "Email Address", "Designation", 
-        "Department", "Joining Date", "Location", "Employment Type", 
-        "Annual CTC", "Basic Salary"
+        "Partner ID", "Company Name", "Email Address", 
+        "Revenue Share Percentage (%)", "Agreement Date",
+        "Address", "Replacement (Days)", "Invoice Post Joining (Days)",
+        "Signatory Name", "Designation"
     ]
     df = pd.DataFrame(columns=headers)
     stream = io.BytesIO()
@@ -82,7 +116,7 @@ def download_template():
     return StreamingResponse(
         stream, 
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-        headers={"Content-Disposition": "attachment; filename=Employee_Import_Template.xlsx"}
+        headers={"Content-Disposition": "attachment; filename=Company_Import_Template.xlsx"}
     )
 
 @router.get("/{employee_id}", response_model=schemas.Employee)
@@ -112,7 +146,7 @@ def delete_employee(employee_id: str, db = Depends(database.get_db)):
 @router.put("/{employee_id}", response_model=schemas.Employee)
 def update_employee(employee_id: str, employee_update: schemas.EmployeeCreate, db = Depends(database.get_db)):
     if not ObjectId.is_valid(employee_id):
-        raise HTTPException(status_code=400, detail="Invalid ObjectId")
+        raise HTTPException(status_code=400, detail=f"Invalid ObjectId: '{employee_id}'")
 
     existing = db.companies.find_one({"_id": ObjectId(employee_id)})
     if not existing:
@@ -121,8 +155,14 @@ def update_employee(employee_id: str, employee_update: schemas.EmployeeCreate, d
     update_data = employee_update.dict()
     new_percentage = update_data.pop('percentage', None)
 
+    # Fix: Convert date to datetime for MongoDB (it cannot store date objects)
+    if update_data.get('joining_date') and isinstance(update_data['joining_date'], date):
+        d = update_data['joining_date']
+        if not isinstance(d, datetime):
+            update_data['joining_date'] = datetime(d.year, d.month, d.day)
+
     # Handle Compensation Update if percentage changed
-    if new_percentage is not None and new_percentage != existing.get("compensation", {}).get("percentage"):
+    if new_percentage is not None:
         update_data["compensation"] = {
             "percentage": new_percentage
         }

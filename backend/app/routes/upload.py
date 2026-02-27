@@ -44,8 +44,10 @@ async def upload_template_image(request: Request, file: UploadFile = File(...)):
 @router.post("/template-pdf")
 async def upload_template_pdf(request: Request, file: UploadFile = File(...)):
     """
-    Uploads a PDF, converts the first page to a high-quality JPG, and saves it to public folder.
-    Returns the URL of the generated image.
+    Uploads a PDF template:
+    1. Saves the original PDF to public folder (for pdf-lib to use)
+    2. Converts first page to JPG as fallback
+    3. Returns the URL as root-relative path for frontend
     """
     try:
         if not file.content_type == "application/pdf":
@@ -54,30 +56,34 @@ async def upload_template_pdf(request: Request, file: UploadFile = File(...)):
         if not os.path.exists(PUBLIC_DIR):
              raise HTTPException(status_code=500, detail=f"Public directory not found at {PUBLIC_DIR}")
 
-        # 1. Save PDF Temporarily
-        temp_pdf_path = PUBLIC_DIR / f"temp_{file.filename}"
-        with open(temp_pdf_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # 2. Convert to Image
-        doc = fitz.open(temp_pdf_path)
-        page = doc.load_page(0) # First page
-        pix = page.get_pixmap(dpi=300) # High Quality
+        # Sanitize filename
+        safe_name = file.filename.replace(" ", "_")
         
-        # 3. Save Image
-        image_filename = f"{file.filename}.jpg"
+        # 1. Save original PDF to public folder (frontend can fetch it directly)
+        pdf_path = PUBLIC_DIR / safe_name
+        contents = await file.read()
+        with open(pdf_path, "wb") as buffer:
+            buffer.write(contents)
+            
+        # 2. Also convert first page to JPG as fallback
+        doc = fitz.open(pdf_path)
+        page = doc.load_page(0)
+        pix = page.get_pixmap(dpi=300)
+        
+        image_filename = f"{safe_name}.jpg"
         image_path = PUBLIC_DIR / image_filename
         pix.save(image_path)
-        
         doc.close()
         
-        # 4. Cleanup Temp PDF
-        if os.path.exists(temp_pdf_path):
-            os.remove(temp_pdf_path)
-            
-        base_url = str(request.base_url).rstrip("/")
-        return {"filename": image_filename, "url": f"{base_url}/{image_filename}", "status": "success"}
+        # 3. Return root-relative URL (Vite serves /public/ as /)
+        # Use the original PDF so pdf-lib can extract all pages
+        return {
+            "filename": safe_name, 
+            "url": f"/{safe_name}",  # Root-relative for frontend
+            "image_url": f"/{image_filename}",
+            "status": "success"
+        }
 
     except Exception as e:
-        print(f"Error converting PDF: {e}")
+        print(f"Error processing template: {e}")
         raise HTTPException(status_code=500, detail=str(e))

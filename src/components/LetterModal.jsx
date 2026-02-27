@@ -183,13 +183,27 @@ const LetterModal = ({ employee, onClose, onSuccess }) => {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || "Upload failed");
+
+            console.log('[Custom Template] Uploaded:', data);
+
+            // Set the template URL (root-relative: /CustomTemplate.pdf)
             setSelectedTemplate(data.url);
+
+            // Regenerate PDF preview with the new template
+            if (generatedContent) {
+                setTimeout(async () => {
+                    await generatePreview(generatedContent);
+                }, 500);
+            }
+
             alert(`Custom Template Uploaded! \n${data.filename}`);
         } catch (err) {
             console.error(err);
             alert("Upload failed: " + err.message);
         } finally {
             setLoading(false);
+            // Reset file input so the same file can be re-uploaded
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
@@ -512,10 +526,29 @@ const LetterModal = ({ employee, onClose, onSuccess }) => {
                                 {isGeneratingPdf && <span style={{ color: 'var(--accent-color)', animation: 'pulse 1s infinite' }}>● Syncing</span>}
                             </div>
                             <div style={{ flex: 1, background: '#525659', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative' }}>
+                                {/* DRAFT watermark in background */}
+                                <div style={{
+                                    position: 'absolute', inset: 0,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    pointerEvents: 'none', zIndex: 0,
+                                    overflow: 'hidden',
+                                }}>
+                                    <div style={{
+                                        fontSize: '5rem',
+                                        fontWeight: '900',
+                                        color: 'rgba(255,255,255,0.06)',
+                                        transform: 'rotate(-35deg)',
+                                        userSelect: 'none',
+                                        letterSpacing: '0.3em',
+                                        whiteSpace: 'nowrap',
+                                    }}>
+                                        DRAFT &nbsp; DRAFT &nbsp; DRAFT
+                                    </div>
+                                </div>
                                 {pdfUrl ? (
-                                    <iframe src={pdfUrl + "#toolbar=0&navpanes=0&zoom=75"} style={{ width: '100%', height: '100%', border: 'none' }} title="PDF Preview" />
+                                    <iframe src={pdfUrl + "#toolbar=0&navpanes=0&zoom=75"} style={{ width: '100%', height: '100%', border: 'none', position: 'relative', zIndex: 1 }} title="PDF Preview" />
                                 ) : (
-                                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>Finalizing pixels...</div>
+                                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', position: 'relative', zIndex: 1 }}>Finalizing pixels...</div>
                                 )}
                             </div>
                         </div>

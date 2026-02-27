@@ -11,6 +11,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [selectedEmployeeForEdit, setSelectedEmployeeForEdit] = useState(null);
+  const [viewEmployee, setViewEmployee] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
@@ -50,10 +51,21 @@ function App() {
 
   const handleSaveEmployee = (employeeData) => {
     const isEdit = !!selectedEmployeeForEdit;
+    // MongoDB returns _id serialized as string in the 'id' field via fix_id()
+    const empId = selectedEmployeeForEdit?.id || selectedEmployeeForEdit?._id;
+
+    if (isEdit && (!empId || typeof empId !== 'string' || empId.length < 20)) {
+      console.error('[Edit] Invalid employee id:', empId, 'Full object:', selectedEmployeeForEdit);
+      alert(`Error: Could not determine employee ID for update. Got: "${empId}". Please refresh and try again.`);
+      return;
+    }
+
     const url = isEdit
-      ? `${API_URL}/employees/${selectedEmployeeForEdit.id}`
+      ? `${API_URL}/employees/${empId}`
       : `${API_URL}/employees/`;
     const method = isEdit ? 'PUT' : 'POST';
+
+    console.log(`[${method}] ${url}`);
 
     fetch(url, {
       method: method,
@@ -585,6 +597,7 @@ function App() {
                     </div>
                     {/* MOVED TO CORNER (As per TC_007) */}
                     <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '8px' }}>
+                      <button onClick={() => setViewEmployee(emp)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px', cursor: 'pointer', padding: '8px', fontSize: '0.9rem', transition: 'background 0.2s', color: 'var(--text-secondary)' }} title="View Details">👁️</button>
                       <button onClick={() => handleEditEmployee(emp)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px', cursor: 'pointer', padding: '8px', fontSize: '0.9rem', transition: 'background 0.2s', color: 'var(--text-secondary)' }} title="Edit">✏️</button>
                       <button onClick={() => handleDeleteEmployee(emp.id)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px', cursor: 'pointer', padding: '8px', fontSize: '0.9rem', transition: 'background 0.2s', color: 'var(--text-secondary)' }} title="Delete">❌</button>
                     </div>
@@ -652,6 +665,7 @@ function App() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button onClick={() => setViewEmployee(emp)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px', cursor: 'pointer', padding: '10px', fontSize: '0.9rem', color: 'var(--text-secondary)' }} title="View Details">👁️</button>
                     <button onClick={() => handleEditEmployee(emp)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px', cursor: 'pointer', padding: '10px', fontSize: '0.9rem', color: 'var(--text-secondary)' }} title="Edit">✏️</button>
                     <button onClick={() => handleDeleteEmployee(emp.id)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '8px', cursor: 'pointer', padding: '10px', fontSize: '0.9rem', color: 'var(--text-secondary)' }} title="Delete">❌</button>
                   </div>
@@ -704,6 +718,76 @@ function App() {
         {isModalOpen && <AddEmployeeModal onClose={() => { setIsModalOpen(false); setSelectedEmployeeForEdit(null); }} onSave={handleSaveEmployee} initialData={selectedEmployeeForEdit} />}
         {selectedEmployee && <LetterModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} onSuccess={() => { setSelectedEmployee(null); fetchEmployees(); }} />}
       </AnimatePresence>
+
+      {/* VIEW DETAILS MODAL */}
+      {viewEmployee && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'var(--modal-overlay)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          zIndex: 2000
+        }} onClick={() => setViewEmployee(null)}>
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--card-bg)',
+              padding: '2.5rem',
+              borderRadius: '28px',
+              width: '650px',
+              maxWidth: '95vw',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'var(--card-shadow)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+              <h2 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                📋 Company Details
+              </h2>
+              <button onClick={() => setViewEmployee(null)} style={{ background: 'var(--bg-tertiary)', border: 'none', borderRadius: '10px', cursor: 'pointer', padding: '8px 14px', fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 700 }}>✕</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
+              {[
+                ['Partner ID', viewEmployee.emp_id || '—'],
+                ['Company Name', viewEmployee.name || '—'],
+                ['Email', viewEmployee.email || '—'],
+                ['Revenue Share %', viewEmployee.compensation?.percentage ? `${viewEmployee.compensation.percentage}%` : '—'],
+                ['Agreement Date', viewEmployee.joining_date || '—'],
+                ['Status', viewEmployee.status || 'Pending'],
+                ['Replacement Days', viewEmployee.replacement || '—'],
+                ['Invoice Post Joining', viewEmployee.invoice_post_joining || '—'],
+              ].map(([label, value]) => (
+                <div key={label} style={{ background: 'var(--bg-primary)', padding: '1rem 1.2rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>{label}</div>
+                  <div style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 600 }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Full-width fields */}
+            <div style={{ marginTop: '1.2rem', display: 'grid', gap: '1.2rem' }}>
+              <div style={{ background: 'var(--bg-primary)', padding: '1rem 1.2rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Address</div>
+                <div style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 600 }}>{viewEmployee.address || '—'}</div>
+              </div>
+              <div style={{ background: 'var(--bg-primary)', padding: '1rem 1.2rem', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Signatory</div>
+                <div style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 600 }}>{viewEmployee.signature || '—'}</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button onClick={() => { setViewEmployee(null); handleEditEmployee(viewEmployee); }} style={{ background: 'var(--accent-gradient)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '14px', cursor: 'pointer', fontWeight: 700, fontSize: '0.95rem' }}>✏️ Edit</button>
+              <button onClick={() => setViewEmployee(null)} style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '12px 24px', borderRadius: '14px', cursor: 'pointer', fontWeight: 700, fontSize: '0.95rem' }}>Close</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
     </div >
   );

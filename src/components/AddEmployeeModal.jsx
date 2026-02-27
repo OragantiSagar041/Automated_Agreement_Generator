@@ -71,9 +71,29 @@ const InputGroup = ({ label, name, type = "text", placeholder, value, onChange, 
 const AddEmployeeModal = ({ onClose, onSave, initialData }) => {
     const [formData, setFormData] = useState(() => {
         if (initialData) {
+            // Split existing signature into name + designation
+            const existingSig = initialData.signature || '';
+            const sigParts = existingSig.includes(' - ') ? existingSig.split(' - ') : [existingSig, ''];
+
+            // Extract percentage from compensation object (API nests it there)
+            const pct = initialData.compensation?.percentage ?? initialData.percentage ?? 0;
+
+            // Format joining_date for date input (needs YYYY-MM-DD)
+            let jd = initialData.joining_date || '';
+            if (jd && jd.includes('T')) jd = jd.split('T')[0]; // strip time part
+
+            // Only pick form-relevant fields — NOT id, status, compensation, created_at
             return {
-                ...initialData,
-                percentage: initialData.percentage || 0
+                emp_id: initialData.emp_id || '',
+                name: initialData.name || '',
+                email: initialData.email || '',
+                percentage: pct,
+                joining_date: jd,
+                address: initialData.address || '',
+                replacement: initialData.replacement || '',
+                invoice_post_joining: initialData.invoice_post_joining || '',
+                sig_name: sigParts[0]?.trim() || '',
+                sig_designation: sigParts[1]?.trim() || '',
             };
         }
         return {
@@ -84,7 +104,8 @@ const AddEmployeeModal = ({ onClose, onSave, initialData }) => {
             joining_date: '',
             address: '',
             replacement: '',
-            signature: '',
+            sig_name: '',
+            sig_designation: '',
             invoice_post_joining: ''
         };
     });
@@ -102,15 +123,45 @@ const AddEmployeeModal = ({ onClose, onSave, initialData }) => {
             }
         }
 
+        // Name field: letters & spaces only, auto-capitalize first letter of each word
+        if (name === 'name') {
+            value = value.replace(/[^a-zA-Z\s]/g, ''); // strip numbers & special chars
+            if (value.length > 0) {
+                value = value.replace(/\b\w/g, c => c.toUpperCase()); // capitalize each word
+            }
+        }
+
+        // sig_name: letters & spaces only, auto-capitalize
+        if (name === 'sig_name') {
+            value = value.replace(/[^a-zA-Z\s]/g, '');
+            if (value.length > 0) {
+                value = value.replace(/\b\w/g, c => c.toUpperCase());
+            }
+        }
+
         setFormData({ ...formData, [name]: value });
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
 
+        // Combine sig_name + sig_designation into signature field
+        const sigName = formData.sig_name?.trim() || '';
+        const sigDesig = formData.sig_designation?.trim() || '';
+        const signature = sigDesig ? `${sigName} - ${sigDesig}` : sigName;
+
+        // Send ONLY the fields the backend's EmployeeCreate schema expects
+        // Do NOT send id, status, compensation, created_at etc.
         const payload = {
-            ...formData,
-            percentage: formData.percentage ? parseFloat(formData.percentage) : 0
+            emp_id: formData.emp_id || '',
+            name: formData.name || '',
+            email: formData.email || '',
+            percentage: formData.percentage ? parseFloat(formData.percentage) : 0,
+            joining_date: formData.joining_date || null,
+            address: formData.address || '',
+            replacement: formData.replacement || '',
+            invoice_post_joining: formData.invoice_post_joining || '',
+            signature,
         };
         onSave(payload);
     };
@@ -163,7 +214,7 @@ const AddEmployeeModal = ({ onClose, onSave, initialData }) => {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end' }}>
                                 <div style={{ gridColumn: 'span 4' }}>
-                                    <InputGroup label="Partner ID" name="emp_id" placeholder="Enter ID (or leave for auto)" value={formData.emp_id} onChange={handleChange} />
+                                    <InputGroup label="Partner ID (Optional)" name="emp_id" placeholder="Optional — auto-generated" value={formData.emp_id} onChange={handleChange} />
                                 </div>
                                 <div style={{ gridColumn: 'span 8' }}>
                                     <InputGroup label="Company Name" name="name" placeholder="e.g. Acme Corp" value={formData.name} onChange={handleChange} required />
@@ -194,8 +245,11 @@ const AddEmployeeModal = ({ onClose, onSave, initialData }) => {
                                 </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end', marginTop: '1.5rem' }}>
-                                <div style={{ gridColumn: 'span 12' }}>
-                                    <InputGroup label="Signatory Name / Designation" name="signature" placeholder="e.g. Navya S - Managing Director" value={formData.signature} onChange={handleChange} required />
+                                <div style={{ gridColumn: 'span 6' }}>
+                                    <InputGroup label="Signatory Name" name="sig_name" placeholder="e.g. Navya S" value={formData.sig_name} onChange={handleChange} required />
+                                </div>
+                                <div style={{ gridColumn: 'span 6' }}>
+                                    <InputGroup label="Designation" name="sig_designation" placeholder="e.g. Managing Director" value={formData.sig_designation} onChange={handleChange} required />
                                 </div>
                             </div>
                         </div>

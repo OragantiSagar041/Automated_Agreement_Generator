@@ -9,7 +9,7 @@ PyObjectId = Annotated[str, BeforeValidator(str)]
 class EmployeeBase(BaseModel):
     emp_id: Optional[str] = None
     name: Optional[str] = None
-    email: EmailStr
+    email: Optional[str] = None  # Relaxed: not EmailStr, handles old imports with phone numbers
     designation: Optional[str] = None
     department: Optional[str] = None
     joining_date: Optional[date] = None
