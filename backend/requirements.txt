@@ -16,3 +16,5 @@ pymongo[srv]
 dnspython
 email-validator
 certifi
+htmldocx
+python-docx
