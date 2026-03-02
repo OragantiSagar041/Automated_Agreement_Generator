@@ -211,46 +211,40 @@ const AddEmployeeModal = ({ onClose, onSave, initialData }) => {
                             <span style={{ fontSize: '1.4rem' }}>🏢</span>
                             <span style={{ borderBottom: '2px solid var(--accent-color)', paddingBottom: '4px', fontWeight: 'bold' }}>Company Information</span>
                         </h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end' }}>
-                                <div style={{ gridColumn: 'span 4' }}>
-                                    <InputGroup label="Partner ID (Optional)" name="emp_id" placeholder="Optional — auto-generated" value={formData.emp_id} onChange={handleChange} />
-                                </div>
-                                <div style={{ gridColumn: 'span 8' }}>
-                                    <InputGroup label="Company Name" name="name" placeholder="e.g. Acme Corp" value={formData.name} onChange={handleChange} required />
-                                </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end' }}>
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Partner ID (Optional)" name="emp_id" placeholder="Optional — auto-generated" value={formData.emp_id} onChange={handleChange} />
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end' }}>
-                                <div style={{ gridColumn: 'span 8' }}>
-                                    <InputGroup label="Email Address" name="email" type="email" placeholder="contact@acme.com" value={formData.email} onChange={handleChange} required />
-                                </div>
-                                <div style={{ gridColumn: 'span 4' }}>
-                                    <InputGroup label="Revenue Share Percentage (%)" name="percentage" type="number" placeholder="20" value={formData.percentage} onChange={handleChange} required />
-                                </div>
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Company Name" name="name" placeholder="e.g. Acme Corp" value={formData.name} onChange={handleChange} required />
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end', marginTop: '1.5rem' }}>
-                                <div style={{ gridColumn: 'span 12' }}>
-                                    <InputGroup label="Address" name="address" placeholder="e.g. 123 Main St, New York..." value={formData.address} onChange={handleChange} required />
-                                </div>
+
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Email Address" name="email" type="email" placeholder="contact@acme.com" value={formData.email} onChange={handleChange} required />
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end', marginTop: '1.5rem' }}>
-                                <div style={{ gridColumn: 'span 4' }}>
-                                    <InputGroup label="Agreement Date" name="joining_date" type="date" value={formData.joining_date} onChange={handleChange} required />
-                                </div>
-                                <div style={{ gridColumn: 'span 4' }}>
-                                    <InputGroup label="Replacement (Days)" name="replacement" type="number" placeholder="e.g. 60" value={formData.replacement} onChange={handleChange} required />
-                                </div>
-                                <div style={{ gridColumn: 'span 4' }}>
-                                    <InputGroup label="Invoice Post Joining (Days)" name="invoice_post_joining" type="number" placeholder="e.g. 45" value={formData.invoice_post_joining} onChange={handleChange} required />
-                                </div>
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Revenue Share (%)" name="percentage" type="number" placeholder="20" value={formData.percentage} onChange={handleChange} required />
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem', alignItems: 'end', marginTop: '1.5rem' }}>
-                                <div style={{ gridColumn: 'span 6' }}>
-                                    <InputGroup label="Signatory Name" name="sig_name" placeholder="e.g. Navya S" value={formData.sig_name} onChange={handleChange} required />
-                                </div>
-                                <div style={{ gridColumn: 'span 6' }}>
-                                    <InputGroup label="Designation" name="sig_designation" placeholder="e.g. Managing Director" value={formData.sig_designation} onChange={handleChange} required />
-                                </div>
+
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Address" name="address" placeholder="e.g. 123 Main St, New York..." value={formData.address} onChange={handleChange} required />
+                            </div>
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Agreement Date" name="joining_date" type="date" value={formData.joining_date} onChange={handleChange} required />
+                            </div>
+
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Replacement (Days)" name="replacement" type="number" placeholder="e.g. 60" value={formData.replacement} onChange={handleChange} required />
+                            </div>
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Invoice Post Joining (Days)" name="invoice_post_joining" type="number" placeholder="e.g. 45" value={formData.invoice_post_joining} onChange={handleChange} required />
+                            </div>
+
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Signatory Name" name="sig_name" placeholder="e.g. Navya S" value={formData.sig_name} onChange={handleChange} required />
+                            </div>
+                            <div style={{ gridColumn: 'span 6' }}>
+                                <InputGroup label="Designation" name="sig_designation" placeholder="e.g. Managing Director" value={formData.sig_designation} onChange={handleChange} required />
                             </div>
                         </div>
                     </div>
