@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import AddEmployeeModal from './components/AddEmployeeModal';
 import LetterModal from './components/LetterModal';
+import BulkSendModal from './components/BulkSendModal';
 import { generatePDFDoc } from './utils/pdfGenerator';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL } from './config';
@@ -27,6 +28,7 @@ function App() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [isBulkSending, setIsBulkSending] = useState(false);
   const [bulkProgress, setBulkProgress] = useState("");
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
 
   const fetchEmployees = () => {
@@ -124,8 +126,19 @@ function App() {
     setSelectedIds(newSet);
   };
 
-  const handleBulkSend = async () => {
-    if (!confirm(`Send Agreements to ${selectedIds.size} candidates?`)) return;
+  const handleBulkSendInitiate = () => {
+    if (selectedIds.size > 300) {
+      alert(`You can only bulk send up to 300 agreements at a time. Currently selected: ${selectedIds.size}`);
+      return;
+    }
+    setIsBulkModalOpen(true);
+  };
+
+  const handleBulkSendConfirm = async (selectedTemplate, companyName) => {
+    setIsBulkModalOpen(false);
+    if (!companyName) return;
+
+    if (!confirm(`Send Agreements to ${selectedIds.size} companies on behalf of ${companyName}?`)) return;
     setIsBulkSending(true);
     setBulkProgress(`Starting...`);
     const ids = Array.from(selectedIds);
@@ -142,13 +155,18 @@ function App() {
           body: JSON.stringify({
             employee_id: emp.id,
             letter_type: "Agreement",
-            tone: "Professional"
+            tone: "Professional",
+            company_name: companyName
           })
         });
         const genData = await genRes.json();
         const content = genData.content;
-        const doc = await generatePDFDoc(content);
-        const pdfBase64 = doc.output('datauristring');
+
+        // Use the selectedTemplate instead of default PDF generator
+        const contentWithoutHeader = content.replace(/<div style="text-align: center; border-bottom: 2px solid #0056b3;[\s\S]*?<\/div>/i, '');
+        const { generatePdfWithTemplate } = await import('./utils/pdfTemplateGenerator');
+        const pdfBase64 = await generatePdfWithTemplate(contentWithoutHeader, selectedTemplate);
+
         const subject = `Agreement - ${emp.name}`;
         await fetch(`${API_URL}/email/send`, {
           method: 'POST',
@@ -158,7 +176,8 @@ function App() {
             letter_content: content,
             pdf_base64: pdfBase64,
             subject: subject,
-            custom_message: `Dear ${emp.name},\n\nWe are pleased to align on an agreement with Arah Infotech.\nPlease find your agreement document attached.\n\nRegards,\nTeam`
+            company_name: companyName,
+            custom_message: `Dear ${emp.name},\n\nWe are pleased to align on an agreement with ${companyName}.\n\nPlease find your agreement document attached.\n\nRegards,\nTeam`
           })
         });
         successCount++;
@@ -256,6 +275,16 @@ function App() {
               }} />
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isBulkModalOpen && (
+          <BulkSendModal
+            selectedCount={selectedIds.size}
+            onClose={() => setIsBulkModalOpen(false)}
+            onConfirm={handleBulkSendConfirm}
+          />
         )}
       </AnimatePresence>
 
@@ -409,7 +438,7 @@ function App() {
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
-                placeholder="Search candidates..."
+                placeholder="Search companies..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{
@@ -474,12 +503,12 @@ function App() {
               onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
               onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
             >
-              <span>+</span> New Candidate
+              <span>+</span> New Company
             </button>
 
             {selectedIds.size > 0 && (
               <button
-                onClick={handleBulkSend} // Changed to handleBulkSend as per original logic
+                onClick={handleBulkSendInitiate}
                 style={{
                   background: 'var(--bg-tertiary)',
                   color: 'var(--text-primary)',
@@ -552,7 +581,7 @@ function App() {
           </div>
         ) : filteredEmployees.length === 0 ? (
           <div style={{ background: 'var(--bg-secondary)', padding: '6rem', borderRadius: '30px', textAlign: 'center', border: '2px dashed var(--border-color)' }}>
-            <p style={{ fontSize: '1.5rem', color: 'var(--text-muted)', fontWeight: 600 }}>No candidates match your criteria.</p>
+            <p style={{ fontSize: '1.5rem', color: 'var(--text-muted)', fontWeight: 600 }}>No companies match your criteria.</p>
           </div>
         ) : (
           <div style={{
